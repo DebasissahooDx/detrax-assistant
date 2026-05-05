@@ -22,9 +22,7 @@ const VoiceAssistant = () => {
       if (isMobile && protocol) {
         window.location.assign(protocol);
         setTimeout(() => {
-          if (!document.hidden) {
-            window.location.href = url;
-          }
+          if (!document.hidden) window.location.href = url;
         }, 2000);
       } else {
         const win = window.open(url, "_blank");
@@ -156,11 +154,11 @@ const VoiceAssistant = () => {
   };
 
   return (
-    // h-[100dvh] is crucial for mobile browser bars
-    <div className="h-[100dvh] w-full flex flex-col items-center justify-between py-6 bg-black text-white overflow-hidden selection:bg-cyan-500/30">
+    /* h-full allows the parent App.js container to control height */
+    <div className="h-full w-full flex flex-col items-center">
       
-      {/* HUD HEADER - Adjusted for safe areas */}
-      <div className="w-full flex justify-between px-6 items-center mt-2">
+      {/* HUD SUB-HEADER - Fixed Height */}
+      <div className="w-full flex justify-between px-2 items-center shrink-0 mb-4">
         <div className="flex flex-col">
           <div className="flex items-center gap-2 text-cyan-400">
             <Cpu size={14} className={isListening ? "animate-pulse" : ""} />
@@ -182,9 +180,9 @@ const VoiceAssistant = () => {
         </button>
       </div>
 
-      {/* CORE VISUALIZER - Scaling for smaller screens */}
-      <div className="relative flex items-center justify-center flex-1">
-        <div className={`relative w-56 h-56 sm:w-64 sm:h-64 md:w-80 md:h-80 rounded-full flex items-center justify-center bg-zinc-900/10 border border-zinc-800/40 transition-all duration-700 ${isListening ? 'border-cyan-500/40 scale-105 shadow-[0_0_60px_rgba(6,182,212,0.15)]' : ''}`}>
+      {/* CORE VISUALIZER - This area expands and contracts */}
+      <div className="flex-1 w-full flex items-center justify-center min-h-0">
+        <div className={`relative max-h-[30vh] md:max-h-[40vh] aspect-square w-full max-w-[280px] rounded-full flex items-center justify-center bg-zinc-900/10 border border-zinc-800/40 transition-all duration-700 ${isListening ? 'border-cyan-500/40 scale-105 shadow-[0_0_60px_rgba(6,182,212,0.15)]' : ''}`}>
           
           <div className={`absolute inset-0 rounded-full transition-opacity duration-1000 ${isListening ? 'opacity-20 animate-pulse' : 'opacity-0'} bg-cyan-500 blur-3xl`} />
           
@@ -195,9 +193,8 @@ const VoiceAssistant = () => {
                 <span className="text-[7px] tracking-[0.3em] text-cyan-500/60 uppercase">Processing</span>
               </div>
             ) : (
-              // scrollbar-hide ensures clean text appearance on mobile
-              <div className="max-h-32 overflow-y-auto scrollbar-hide">
-                <p className="text-xs md:text-base font-light tracking-wide text-zinc-200 leading-relaxed px-2">
+              <div className="max-h-24 overflow-y-auto scrollbar-hide">
+                <p className="text-xs sm:text-sm font-light tracking-wide text-zinc-200 leading-relaxed px-2">
                   {aiReply || <span className="text-zinc-700 tracking-[0.2em] text-[9px] uppercase font-bold">Node Ready</span>}
                 </p>
               </div>
@@ -207,20 +204,24 @@ const VoiceAssistant = () => {
       </div>
 
       {/* FEEDBACK & INPUT - Fixed bottom positioning */}
-      <div className="w-full flex flex-col items-center gap-4 px-6 pb-8">
-        <div className="h-8 text-center max-w-[80%]">
-          <p className={`text-[13px] transition-all duration-300 line-clamp-2 ${isListening ? 'text-cyan-400 font-medium' : 'text-zinc-600 italic opacity-60'}`}>
+      <div className="w-full flex flex-col items-center gap-4 py-4 shrink-0">
+        <div className="h-8 text-center max-w-[90%]">
+          <p className={`text-[12px] sm:text-[13px] transition-all duration-300 line-clamp-2 ${isListening ? 'text-cyan-400 font-medium' : 'text-zinc-600 italic opacity-60'}`}>
             {transcript ? `"${transcript}"` : "Transmit Signal"}
           </p>
         </div>
 
-        <button
-          onClick={() => isListening ? recognitionRef.current?.stop() : recognitionRef.current?.start()}
-          className={`relative p-8 rounded-full transition-all duration-300 active:scale-90 ${isListening ? "bg-cyan-500 text-black shadow-[0_0_30px_rgba(6,182,212,0.4)]" : "bg-white text-black"}`}
-        >
-          {isListening ? <X size={32} strokeWidth={3} /> : <Mic size={32} strokeWidth={2} />}
-          {!isListening && <div className="absolute inset-0 rounded-full bg-white/20 animate-ping pointer-events-none" />}
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => isListening ? recognitionRef.current?.stop() : recognitionRef.current?.start()}
+            className={`relative p-8 rounded-full transition-all duration-300 active:scale-90 z-20 ${isListening ? "bg-cyan-500 text-black shadow-[0_0_30px_rgba(6,182,212,0.4)]" : "bg-white text-black"}`}
+          >
+            {isListening ? <X size={32} strokeWidth={3} /> : <Mic size={32} strokeWidth={2} />}
+          </button>
+          {!isListening && (
+            <div className="absolute inset-0 rounded-full bg-white/20 animate-ping pointer-events-none z-10" />
+          )}
+        </div>
       </div>
 
       {/* MOBILE HISTORY OVERLAY */}
