@@ -201,7 +201,7 @@ const VoiceAssistant = () => {
             ) : (
               <div className="max-h-24 overflow-y-auto scrollbar-hide">
                 <p className="text-xs sm:text-sm font-light tracking-wide text-zinc-200 leading-relaxed px-2">
-                  {aiReply || <span className="text-zinc-700 tracking-[0.2em] text-[9px] uppercase font-bold">Node Ready</span>}
+                  {aiReply || <span className="text-zinc-700 tracking-[0.2em] text-[9px] uppercase font-bold">Detrax Ready</span>}
                 </p>
               </div>
             )}
