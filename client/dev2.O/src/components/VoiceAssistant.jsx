@@ -13,26 +13,91 @@ const VoiceAssistant = () => {
   const recognitionRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  const performAction = (text) => {
+    const input = text.toLowerCase().trim();
+    
+    const launch = (url, protocol) => {
+      if (isMobile && protocol) {
+        window.location.assign(protocol);
+        setTimeout(() => {
+          if (!document.hidden) {
+            window.location.href = url;
+          }
+        }, 2000);
+      } else {
+        const win = window.open(url, "_blank");
+        if (!win) window.location.href = url;
+      }
+    };
+
+    if (input.includes("youtube")) {
+      let query = "";
+      if (input.includes("play")) query = input.split("play")[1].split("on youtube")[0].trim();
+      else if (input.includes("search for")) query = input.split("search for")[1].split("on youtube")[0].trim();
+
+      const targetUrl = query 
+        ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+        : "https://www.youtube.com";
+      
+      speak(query ? `Searching YouTube for ${query}` : "Opening YouTube");
+      setAiReply(query ? `YOUTUBE: ${query.toUpperCase()}` : "LAUNCHING_YOUTUBE");
+      setTimeout(() => launch(targetUrl, "youtube://"), 800);
+      return true;
+    }
+
+    const commands = {
+      "whatsapp": { p: "whatsapp://send", w: "https://web.whatsapp.com" },
+      "spotify": { p: "spotify://", w: "https://open.spotify.com" },
+      "discord": { p: "discord://", w: "https://discord.com/app" },
+      "instagram": { p: "instagram://", w: "https://www.instagram.com" },
+      "facebook": { p: "fb://", w: "https://www.facebook.com" },
+      "telegram": { p: "tg://", w: "https://web.telegram.org" },
+      "maps": { p: "maps://", w: "https://maps.google.com" }
+    };
+
+    for (const [name, urls] of Object.entries(commands)) {
+      if (input.includes(`open ${name}`)) {
+        speak(`Opening ${name}`);
+        setAiReply(`LINK_START: ${name.toUpperCase()}`);
+        setTimeout(() => launch(urls.w, urls.p), 800);
+        return true;
+      }
+    }
+
+    const urlMatch = input.match(/open\s+([a-zA-Z0-9-]+\.[a-z]{2,})/);
+    if (urlMatch) {
+      const site = urlMatch[1];
+      speak(`Navigating to ${site}`);
+      setAiReply(`WEB_BROWSER: ${site.toUpperCase()}`);
+      setTimeout(() => launch(`https://${site}`), 800);
+      return true;
+    }
+
+    return false;
+  };
+
   const fetchHistory = async () => {
     try {
       const res = await api.get("/chat/history");
       setHistory(res.data);
-    } catch (err) { console.error("Sync error"); }
+    } catch (err) { console.error("History sync offline"); }
   };
 
   const deleteOne = async (id) => {
     try {
       await api.delete(`/chat/${id}`);
       setHistory(prev => prev.filter(item => item._id !== id));
-    } catch (err) { alert("Delete failed"); }
+    } catch (err) { console.error("Purge failed"); }
   };
 
   const clearAll = async () => {
-    if (window.confirm("PURGE ENTIRE HISTORY?")) {
+    if (window.confirm("PURGE SYSTEM LOGS?")) {
       try {
         await api.delete("/chat/history");
         setHistory([]);
-      } catch (err) { alert("Purge failed"); }
+      } catch (err) { console.error("Wipe failed"); }
     }
   };
 
@@ -42,6 +107,8 @@ const VoiceAssistant = () => {
       const recognition = new SpeechRecognition();
       recognition.lang = "en-US";
       recognition.interimResults = true;
+      recognition.continuous = false;
+      
       recognition.onstart = () => setIsListening(true);
       recognition.onresult = (e) => {
         const text = Array.from(e.results).map(result => result[0].transcript).join('');
@@ -61,119 +128,137 @@ const VoiceAssistant = () => {
   const speak = useCallback((text) => {
     synthRef.current.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Selecting a clearer voice if available
     const voices = synthRef.current.getVoices();
-    const selectedVoice = voices.find(v => v.name.includes("Google") || v.name.includes("Female"));
-    if (selectedVoice) utterance.voice = selectedVoice;
-    
-    utterance.rate = 1.05;
+    const voice = voices.find(v => v.lang === 'en-US' && (v.name.includes("Google") || v.name.includes("Female")));
+    if (voice) utterance.voice = voice;
+    utterance.rate = 1.0;
     synthRef.current.speak(utterance);
   }, []);
 
   const handleProcessCommand = async (text) => {
     if (!text.trim()) return;
+    if (performAction(text)) return;
+
     setIsLoading(true);
-    setAiReply(""); // Clear old reply for new animation
+    setAiReply(""); 
     try {
       const res = await api.post("/chat", { message: text });
       const cleanReply = res.data.reply.replace(/[*_#`]/g, "");
-      setAiReply(cleanReply); // THIS MAKES THE TEXT APPEAR IN THE UI
-      speak(cleanReply);    // THIS PLAYS THE VOICE
+      setAiReply(cleanReply); 
+      speak(cleanReply);    
       fetchHistory(); 
     } catch (err) { 
-      setAiReply("Neural link severed."); 
-      speak("Neural link severed.");
+      setAiReply("Neural link error."); 
+      speak("Neural link error.");
     } finally { 
       setIsLoading(false); 
     }
   };
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-around py-4 relative bg-black text-white">
+    // h-[100dvh] is crucial for mobile browser bars
+    <div className="h-[100dvh] w-full flex flex-col items-center justify-between py-6 bg-black text-white overflow-hidden selection:bg-cyan-500/30">
       
-      {/* HISTORY OVERLAY */}
-      {showHistory && (
-        <div className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl p-6 flex flex-col animate-in slide-in-from-right">
-          <div className="flex justify-between items-center mb-8 border-b border-zinc-800 pb-4">
-            <h2 className="text-cyan-500 font-black tracking-[0.3em] text-[10px]">NEURAL_LOGS</h2>
-            <div className="flex gap-6">
-              <button onClick={clearAll} className="text-red-900/60 hover:text-red-500"><Trash2 size={18} /></button>
-              <button onClick={() => setShowHistory(false)} className="text-zinc-500 hover:text-white"><X size={22} /></button>
-            </div>
+      {/* HUD HEADER - Adjusted for safe areas */}
+      <div className="w-full flex justify-between px-6 items-center mt-2">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2 text-cyan-400">
+            <Cpu size={14} className={isListening ? "animate-pulse" : ""} />
+            <span className="text-[10px] font-black tracking-[0.3em]">DETRAX_V2.0</span>
           </div>
-          
-          <div className="flex-1 overflow-y-auto space-y-6 pr-2 scrollbar-hide">
-            {history.length > 0 ? history.map((log) => (
-              <div key={log._id} className="group relative border-l-2 border-zinc-900 pl-4 transition-all hover:border-cyan-500">
-                <button 
-                  onClick={() => deleteOne(log._id)}
-                  className="absolute right-0 top-0 text-zinc-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash size={14} />
-                </button>
-                <p className="text-cyan-400/50 text-[9px] font-bold uppercase tracking-widest">User</p>
-                <p className="text-zinc-300 text-sm mb-2">{log.userMessage}</p>
-                <p className="text-zinc-500 text-xs italic">{log.aiMessage}</p>
-              </div>
-            )) : <p className="text-zinc-700 text-center text-[10px] mt-20">LOGS_EMPTY</p>}
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <div className={`w-1 h-1 rounded-full ${isListening ? 'bg-cyan-500 animate-ping' : 'bg-zinc-700'}`} />
+            <span className="text-[7px] text-zinc-500 font-mono uppercase tracking-[0.2em]">
+              {isMobile ? "Mobile_Core" : "Desktop_Core"}
+            </span>
           </div>
         </div>
-      )}
-
-      {/* TOP CONTROLS */}
-      <div className="w-full flex justify-between px-6">
-        <div className="flex items-center gap-2 text-cyan-500 opacity-70">
-          <Cpu size={12} />
-          <span className="text-[8px] font-black tracking-[0.3em]">DETRAX_V2</span>
-        </div>
-        <button onClick={() => { setShowHistory(true); fetchHistory(); }} className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800 text-zinc-500 hover:text-cyan-500 transition-colors">
-          <History size={20} />
+        
+        <button 
+          onClick={() => { setShowHistory(true); fetchHistory(); }} 
+          className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-zinc-400 active:bg-zinc-800 transition-all"
+        >
+          <History size={18} />
         </button>
       </div>
 
-      {/* ROBOT CORE - UPDATED TO SHOW AI MESSAGE */}
-      <div className="relative flex items-center justify-center">
-        <div className={`relative w-72 h-72 rounded-full flex items-center justify-center bg-gradient-to-b from-zinc-900 to-black border border-zinc-800 transition-all duration-500 ${isListening ? 'shadow-[0_0_60px_rgba(6,182,212,0.3)] border-cyan-500/50' : ''}`}>
+      {/* CORE VISUALIZER - Scaling for smaller screens */}
+      <div className="relative flex items-center justify-center flex-1">
+        <div className={`relative w-56 h-56 sm:w-64 sm:h-64 md:w-80 md:h-80 rounded-full flex items-center justify-center bg-zinc-900/10 border border-zinc-800/40 transition-all duration-700 ${isListening ? 'border-cyan-500/40 scale-105 shadow-[0_0_60px_rgba(6,182,212,0.15)]' : ''}`}>
           
-          {/* Pulsing background effect when AI is speaking or listening */}
-          <div className={`absolute inset-0 rounded-full transition-opacity duration-1000 ${(isListening || aiReply) ? 'opacity-20' : 'opacity-0'} bg-cyan-500 blur-3xl`} />
-
-          <div className="z-10 px-10 text-center">
+          <div className={`absolute inset-0 rounded-full transition-opacity duration-1000 ${isListening ? 'opacity-20 animate-pulse' : 'opacity-0'} bg-cyan-500 blur-3xl`} />
+          
+          <div className="z-10 px-6 text-center">
             {isLoading ? (
-              <Activity className="w-10 h-10 text-cyan-500 animate-pulse mx-auto" />
+              <div className="flex flex-col items-center">
+                <Activity className="w-8 h-8 text-cyan-500 animate-spin mb-2" />
+                <span className="text-[7px] tracking-[0.3em] text-cyan-500/60 uppercase">Processing</span>
+              </div>
             ) : (
-              <div className="space-y-2">
-                {aiReply ? (
-                  <p className="text-sm font-medium leading-relaxed tracking-wide text-cyan-50 animate-in fade-in duration-700">
-                    {aiReply}
-                  </p>
-                ) : (
-                  <p className="text-[10px] font-bold tracking-[0.3em] text-zinc-500 uppercase">
-                    System Ready
-                  </p>
-                )}
+              // scrollbar-hide ensures clean text appearance on mobile
+              <div className="max-h-32 overflow-y-auto scrollbar-hide">
+                <p className="text-xs md:text-base font-light tracking-wide text-zinc-200 leading-relaxed px-2">
+                  {aiReply || <span className="text-zinc-700 tracking-[0.2em] text-[9px] uppercase font-bold">Node Ready</span>}
+                </p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* TRANSCRIPT */}
-      <div className="text-center h-16 px-6">
-        <p className="text-[8px] uppercase tracking-[0.4em] text-zinc-600 mb-2 font-bold">User Input</p>
-        <p className={`text-base font-light italic transition-opacity ${isListening ? 'opacity-100 text-cyan-400' : 'opacity-40 text-zinc-400'}`}>
-          {transcript ? `"${transcript}"` : "..."}
-        </p>
+      {/* FEEDBACK & INPUT - Fixed bottom positioning */}
+      <div className="w-full flex flex-col items-center gap-4 px-6 pb-8">
+        <div className="h-8 text-center max-w-[80%]">
+          <p className={`text-[13px] transition-all duration-300 line-clamp-2 ${isListening ? 'text-cyan-400 font-medium' : 'text-zinc-600 italic opacity-60'}`}>
+            {transcript ? `"${transcript}"` : "Transmit Signal"}
+          </p>
+        </div>
+
+        <button
+          onClick={() => isListening ? recognitionRef.current?.stop() : recognitionRef.current?.start()}
+          className={`relative p-8 rounded-full transition-all duration-300 active:scale-90 ${isListening ? "bg-cyan-500 text-black shadow-[0_0_30px_rgba(6,182,212,0.4)]" : "bg-white text-black"}`}
+        >
+          {isListening ? <X size={32} strokeWidth={3} /> : <Mic size={32} strokeWidth={2} />}
+          {!isListening && <div className="absolute inset-0 rounded-full bg-white/20 animate-ping pointer-events-none" />}
+        </button>
       </div>
 
-      {/* MIC BUTTON */}
-      <button
-        onClick={() => isListening ? recognitionRef.current?.stop() : recognitionRef.current?.start()}
-        className={`p-10 rounded-full transition-all duration-500 active:scale-90 ${isListening ? "bg-cyan-500 text-black shadow-[0_0_50px_rgba(6,182,212,0.6)]" : "bg-white text-black hover:bg-cyan-50"}`}
-      >
-        {isListening ? <X size={36} /> : <Mic size={36} />}
-      </button>
+      {/* MOBILE HISTORY OVERLAY */}
+      {showHistory && (
+        <div className="fixed inset-0 z-[100] bg-black p-5 flex flex-col animate-in slide-in-from-bottom duration-300">
+          <div className="flex justify-between items-center mb-6 pt-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-3 bg-cyan-500 rounded-full" />
+              <h2 className="text-cyan-500 font-black tracking-[0.3em] text-[10px]">LOGS</h2>
+            </div>
+            <div className="flex gap-5 items-center">
+              <button onClick={clearAll} className="text-zinc-700 active:text-red-500"><Trash2 size={18} /></button>
+              <button onClick={() => setShowHistory(false)} className="text-zinc-500 p-2"><X size={24} /></button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-5 pb-10 scrollbar-hide">
+            {history.length > 0 ? history.map((log) => (
+              <div key={log._id} className="relative border-l-2 border-zinc-900 pl-4 py-1 active:bg-zinc-900/20 transition-colors">
+                <button onClick={() => deleteOne(log._id)} className="absolute right-0 top-0 text-zinc-800 p-1"><Trash size={14} /></button>
+                <div className="mb-2">
+                  <p className="text-[8px] text-cyan-900 font-bold uppercase tracking-widest mb-1">Inbound</p>
+                  <p className="text-zinc-300 text-[13px]">{log.userMessage}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] text-zinc-800 font-bold uppercase tracking-widest mb-1">Detrax</p>
+                  <p className="text-zinc-500 text-[12px] italic leading-relaxed">{log.aiMessage}</p>
+                </div>
+              </div>
+            )) : (
+              <div className="flex flex-col items-center justify-center h-full opacity-10">
+                <Cpu size={40} />
+                <p className="text-[10px] tracking-widest mt-2 uppercase">Empty</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
