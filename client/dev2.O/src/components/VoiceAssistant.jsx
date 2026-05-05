@@ -46,6 +46,7 @@ const VoiceAssistant = () => {
     }
 
     const commands = {
+      "youtube": { p: "youtube://", w: "https://www.youtube.com" },
       "whatsapp": { p: "whatsapp://send", w: "https://web.whatsapp.com" },
       "spotify": { p: "spotify://", w: "https://open.spotify.com" },
       "discord": { p: "discord://", w: "https://discord.com/app" },
@@ -85,17 +86,23 @@ const VoiceAssistant = () => {
 
   const deleteOne = async (id) => {
     try {
-      await api.delete(`/chat/${id}`);
+      // Immediate UI feedback
       setHistory(prev => prev.filter(item => item._id !== id));
-    } catch (err) { console.error("Purge failed"); }
+      await api.delete(`/chat/${id}`);
+    } catch (err) { 
+      console.error("Purge failed"); 
+      fetchHistory(); // Revert on failure
+    }
   };
 
   const clearAll = async () => {
-    if (window.confirm("PURGE SYSTEM LOGS?")) {
-      try {
-        await api.delete("/chat/history");
-        setHistory([]);
-      } catch (err) { console.error("Wipe failed"); }
+    // Removed window.confirm as requested
+    try {
+      setHistory([]); // Immediate UI feedback
+      await api.delete("/chat/history");
+    } catch (err) { 
+      console.error("Wipe failed"); 
+      fetchHistory(); // Revert on failure
     }
   };
 
@@ -154,11 +161,10 @@ const VoiceAssistant = () => {
   };
 
   return (
-    /* h-full allows the parent App.js container to control height */
     <div className="h-full w-full flex flex-col items-center">
       
-      {/* HUD SUB-HEADER - Fixed Height */}
-      <div className="w-full flex justify-between px-2 items-center shrink-0 mb-4">
+      {/* HUD SUB-HEADER */}
+      <div className="w-full flex justify-between px-2 items-center shrink-0 mb-2">
         <div className="flex flex-col">
           <div className="flex items-center gap-2 text-cyan-400">
             <Cpu size={14} className={isListening ? "animate-pulse" : ""} />
@@ -180,9 +186,9 @@ const VoiceAssistant = () => {
         </button>
       </div>
 
-      {/* CORE VISUALIZER - This area expands and contracts */}
+      {/* CORE VISUALIZER - Flexible height to prevent overlap */}
       <div className="flex-1 w-full flex items-center justify-center min-h-0">
-        <div className={`relative max-h-[30vh] md:max-h-[40vh] aspect-square w-full max-w-[280px] rounded-full flex items-center justify-center bg-zinc-900/10 border border-zinc-800/40 transition-all duration-700 ${isListening ? 'border-cyan-500/40 scale-105 shadow-[0_0_60px_rgba(6,182,212,0.15)]' : ''}`}>
+        <div className={`relative max-h-[25vh] sm:max-h-[35vh] aspect-square w-full max-w-[260px] rounded-full flex items-center justify-center bg-zinc-900/10 border border-zinc-800/40 transition-all duration-700 ${isListening ? 'border-cyan-500/40 scale-105 shadow-[0_0_60px_rgba(6,182,212,0.15)]' : ''}`}>
           
           <div className={`absolute inset-0 rounded-full transition-opacity duration-1000 ${isListening ? 'opacity-20 animate-pulse' : 'opacity-0'} bg-cyan-500 blur-3xl`} />
           
@@ -203,7 +209,7 @@ const VoiceAssistant = () => {
         </div>
       </div>
 
-      {/* FEEDBACK & INPUT - Fixed bottom positioning */}
+      {/* FOOTER CONTROLS - shrink-0 keeps button visible */}
       <div className="w-full flex flex-col items-center gap-4 py-4 shrink-0">
         <div className="h-8 text-center max-w-[90%]">
           <p className={`text-[12px] sm:text-[13px] transition-all duration-300 line-clamp-2 ${isListening ? 'text-cyan-400 font-medium' : 'text-zinc-600 italic opacity-60'}`}>
@@ -224,7 +230,7 @@ const VoiceAssistant = () => {
         </div>
       </div>
 
-      {/* MOBILE HISTORY OVERLAY */}
+      {/* HISTORY OVERLAY */}
       {showHistory && (
         <div className="fixed inset-0 z-[100] bg-black p-5 flex flex-col animate-in slide-in-from-bottom duration-300">
           <div className="flex justify-between items-center mb-6 pt-2">
